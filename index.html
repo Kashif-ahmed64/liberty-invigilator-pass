@@ -80,10 +80,40 @@
 
     .size-note { font-size: 0.78rem; color: #a1a1aa; text-align: center; }
 
+    .size-select-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+    }
+
+    .size-select-wrap label {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #71717a;
+    }
+
+    .size-select-wrap select {
+      padding: 8px 12px;
+      border: 1.5px solid #d4d4d8;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-family: inherit;
+      background: #fff;
+      min-width: 220px;
+      cursor: pointer;
+    }
+
+    .size-select-wrap select:focus {
+      outline: none;
+      border-color: #e60000;
+    }
+
     /* ===== OFFICIAL PASS CARD ===== */
     .pass-card {
-      width: 75mm;
-      height: 100mm;
+      width: var(--card-width, 75mm);
+      height: var(--card-height, 100mm);
       background: #ffffff;
       border-radius: 3mm;
       overflow: hidden;
@@ -380,15 +410,13 @@
 
     /* ===== PRINT ===== */
     @media print {
-      @page { size: 75mm 100mm; margin: 0; }
-
       body {
         background: white !important;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
 
-      .app-header, .controls, .preview-label, .size-note { display: none !important; }
+      .app-header, .controls, .preview-label, .size-note, .size-select-wrap { display: none !important; }
       .app { padding: 0; max-width: none; }
       .layout { display: block; }
       .preview-section { position: static; }
@@ -436,7 +464,14 @@
             <div class="pass-zone pass-zone--footer" id="zoneFooter"></div>
           </div>
         </div>
-        <p class="size-note">Lamination pouch size: 75mm × 100mm (OLD ID)</p>
+        <div class="size-select-wrap">
+          <label for="pouchSize">Lamination pouch size</label>
+          <select id="pouchSize">
+            <option value="65x85">65mm × 85mm</option>
+            <option value="70x90">70mm × 90mm</option>
+            <option value="75x100" selected>75mm × 100mm (OLD ID)</option>
+          </select>
+        </div>
       </section>
 
       <aside class="controls">
@@ -474,6 +509,38 @@
     };
     let fieldIdCounter = 0;
     let currentTheme = 'liberty-official';
+    let currentPouchSize = '75x100';
+
+    const POUCH_SIZES = {
+      '65x85': { width: 65, height: 85, label: '65mm × 85mm' },
+      '70x90': { width: 70, height: 90, label: '70mm × 90mm' },
+      '75x100': { width: 75, height: 100, label: '75mm × 100mm (OLD ID)' }
+    };
+
+    function getSizeScale() {
+      return POUCH_SIZES[currentPouchSize].height / 100;
+    }
+
+    function scaleMm(val) {
+      return (val * getSizeScale()).toFixed(2);
+    }
+
+    function applyPouchSize(key) {
+      currentPouchSize = key;
+      const { width, height } = POUCH_SIZES[key];
+      passCard.style.setProperty('--card-width', width + 'mm');
+      passCard.style.setProperty('--card-height', height + 'mm');
+
+      let printStyle = document.getElementById('printPageStyle');
+      if (!printStyle) {
+        printStyle = document.createElement('style');
+        printStyle.id = 'printPageStyle';
+        document.head.appendChild(printStyle);
+      }
+      printStyle.textContent = `@media print { @page { size: ${width}mm ${height}mm; margin: 0; } }`;
+
+      renderCard();
+    }
 
     const themes = {
       'liberty-official': {
@@ -637,7 +704,7 @@
     function textStyle(f) {
       return `
         font-family: Arial, Helvetica, sans-serif;
-        font-size:${f.fontSize}mm;
+        font-size:${scaleMm(f.fontSize)}mm;
         font-weight:${f.fontWeight};
         text-align:${f.align};
         color:${resolveColor(f.color, f.customColor)};
@@ -654,7 +721,7 @@
         return `
           <div class="card-field card-field--logo" data-id="${f.id}" style="justify-content:${justify}">
             <img class="${shapeClass}" src="${f.src}" alt="Liberty Logo"
-              style="width:${f.sizeMm}mm;height:${f.sizeMm}mm;background:${bg}">
+              style="width:${scaleMm(f.sizeMm)}mm;height:${scaleMm(f.sizeMm)}mm;background:${bg}">
           </div>`;
       }
 
@@ -662,7 +729,7 @@
         const align = f.align || 'center';
         return `
           <div class="card-field card-field--company-name" data-id="${f.id}">
-            <div class="company-line" style="font-size:${f.fontSize}mm;text-align:${align}">
+            <div class="company-line" style="font-size:${scaleMm(f.fontSize)}mm;text-align:${align}">
               <span class="company-before" style="color:${f.baseColor || OFFICIAL.black}">${escapeHtml(f.before)}</span><span class="company-highlight" style="color:${f.highlightColor || OFFICIAL.red}">${escapeHtml(f.highlight)}</span><span class="company-after" style="color:${f.baseColor || OFFICIAL.black}">${escapeHtml(f.after)}</span>
             </div>
           </div>`;
@@ -671,7 +738,7 @@
       if (f.type === 'tagbox') {
         const lines = f.lines.map((line, i) => {
           const style = `
-            font-size:${f.fontSizes[i] || 3.5}mm;
+            font-size:${scaleMm(f.fontSizes[i] || 3.5)}mm;
             font-weight:${f.fontWeights[i] || 700};
             color:${resolveColor(f.colors[i] || 'theme-primary', f.customColors?.[i])};
             text-transform:${f.uppercase[i] ? 'uppercase' : 'none'};
@@ -1187,8 +1254,13 @@
     document.getElementById('btnDownload').addEventListener('click', () => downloadCard(true));
     document.getElementById('btnDownloadThemed').addEventListener('click', () => downloadCard(false));
 
+    document.getElementById('pouchSize').addEventListener('change', (e) => {
+      applyPouchSize(e.target.value);
+    });
+
     renderThemeButtons();
     applyTheme('liberty-official');
+    applyPouchSize('75x100');
     renderAll();
   </script>
 </body>
